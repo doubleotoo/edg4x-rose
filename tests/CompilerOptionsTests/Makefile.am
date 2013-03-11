@@ -3,6 +3,7 @@ include $(top_srcdir)/config/Makefile.for.ROSE.includes.and.libs
 # See the README file (in this dirctory) for a brief description of the purpuse for each subdirectory.
 # SUBDIRS = A++Code 
 SUBDIRS = \
+   keep_going \
    testOutputFileOption \
    testHeaderFileOutput testFileNamesAndExtensions testGnuOptions \
    testWave \

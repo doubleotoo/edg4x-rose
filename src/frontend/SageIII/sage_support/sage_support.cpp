@@ -1261,13 +1261,51 @@ determineFileType ( vector<string> argv, int & nextErrorCode, SgProject* project
   // control flow. The callFrontEnd() relies on all the "set_" flags to be already called therefore
   // it was placed here.
   // if ( isSgUnknownFile(file) == NULL && file != NULL  )
-     if ( file != NULL && isSgUnknownFile(file) == NULL )
-        {
-       // printf ("Calling file->callFrontEnd() \n");
-          nextErrorCode = file->callFrontEnd();
-       // printf ("DONE: Calling file->callFrontEnd() \n");
-          ROSE_ASSERT ( nextErrorCode <= 3);
-        }
+  if ( file != NULL && isSgUnknownFile(file) == NULL )
+  {
+      if (SgProject::get_verbose() >= 1)
+      {
+          std::cout
+              << "[INFO] "
+              << "Running frontend on file "
+              << "'" << file->getFileName() << "'"
+              << std::endl;
+      }
+
+      //========================================================================
+      // Call the Frontend
+      //========================================================================
+      nextErrorCode = file->callFrontEnd();
+
+      // Warnings from EDG processing are OK but not errors
+      if (nextErrorCode <= 3)
+      {
+          if (SgProject::get_verbose() >= 1)
+          {
+              std::cout
+                  << "[INFO] "
+                  << "Finished running frontend on file "
+                  << "'" << file->getFileName() << "'"
+                  << std::endl;
+          }
+      }
+      else
+      {
+          if (file->get_project()->get_keep_going() == true)
+          {
+              std::cout
+                  << "[WARN] "
+                  << "Ignoring frontend failures for file "
+                  << "'" << file->getFileName() << "', "
+                  << "as directed by -rose:keep_going"
+                  << std::endl;
+          }
+          else
+          {
+              ROSE_ASSERT(! "[FATAL] We encountered a Frontend failure");
+          }
+      }
+  }
 
   // Keep the filename stored in the Sg_File_Info consistant.  Later we will want to remove this redundency
   // The reason we have the Sg_File_Info object is so that we can easily support filename matching based on
@@ -1753,8 +1791,22 @@ SgProject::parse()
              }
         }
 
-  // warnings from EDG processing are OK but not errors
-     ROSE_ASSERT (errorCode <= 3);
+  // Warnings from EDG processing (<= 3) are OK but not errors
+  if (errorCode > 3)
+  {
+      if (this->get_keep_going() == true)
+      {
+          std::cout
+              << "[WARN] "
+              << "Ignoring frontend failures, "
+              << "as directed by -rose:keep_going"
+              << std::endl;
+      }
+      else
+      {
+          ROSE_ASSERT (! "[ERROR] Frontend processing failed");
+      }
+  }
 
   // if (get_useBackendOnly() == false)
      if ( SgProject::get_verbose() >= 1 )
@@ -4356,33 +4408,45 @@ SgSourceFile::buildAST( vector<string> argv, vector<string> inputCommandLine )
           printf ("DONE: frontend called (frontendErrorLevel = %d) \n",frontendErrorLevel);
 
   // If we had any errors reported by the frontend then quite now
-     if (frontend_failed == true)
-        {
-       // cout << "Errors in Processing: (frontendErrorLevel > 3)" << endl;
-          if ( get_verbose() > 1 )
-               printf ("frontendErrorLevel = %d \n",frontendErrorLevel);
+  if (frontend_failed == true)
+  {
+      if (get_verbose() > 1)
+      {
+          std::cout
+              << "[ERROR] "
+              << "Frontend processing failed with error code="
+              << "'" << frontendErrorLevel << "'"
+              << std::endl;
+      }
 
        // DQ (9/22/2006): We need to invert the test result (return code) for
        // negative tests (where failure is expected and success is an error).
-          if (get_negative_test() == true)
-             {
-               if ( get_verbose() > 1 )
-                  {
-                    printf ("(evaluation of frontend results) This is a negative tests, so an error in compilation is a PASS but a successful \n");
-                    printf ("compilation is not a FAIL since the faulure might happen in the compilation of the generated code by the vendor compiler. \n");
-                  }
-               exit(0);
-             }
-            else
-             {
-            // Exit because there are errors in the input program
-               //cout << "Errors in Processing: (frontend_failed)" << endl;
-               ROSE_ABORT("Errors in Processing: (frontend_failed)");
-             }
-        }
+      if (get_negative_test() == true)
+      {
+          if (get_verbose() > 1)
+          {
+              printf("(evaluation of frontend results) This is a negative tests, so an error in compilation is a PASS but a successful\n");
+              printf("compilation is not a FAIL since the faulure might happen in the compilation of the generated code by the vendor compiler.\n");
+          }
+          exit(0);
+      }
 
-     return frontendErrorLevel;
-   }
+      if (get_project()->get_keep_going())
+      {
+          std::cout
+              << "[WARN] "
+              << "Ignoring frontend failures as directed by -rose:keep_going"
+              << std::endl;
+      }
+      else
+      {
+          // Exit because there are errors in the input program
+          ROSE_ABORT("Errors in Processing: (frontend_failed)");
+      }
+  }
+
+  return frontendErrorLevel;
+}
 
 // DQ (10/14/2010): Removing reference to macros defined in rose_config.h (defined in the header file as a default parameter).
 // int SgFile::compileOutput ( vector<string>& argv, int fileNameIndex, const string& compilerNameOrig )
@@ -4457,42 +4521,40 @@ SgFile::compileOutput ( vector<string>& argv, int fileNameIndex )
   // p_sourceFileNameWithPath    = *(fileList.begin());
   // p_sourceFileNameWithoutPath = ROSE::stripPathFromFileName(p_sourceFileNameWithPath.c_str());
 
-#if 1
   // ROSE_ASSERT (get_unparse_output_filename().empty() == true);
 
   // DQ (4/21/2006): If we have not set the unparse_output_filename then we could not have called
   // unparse and we want to compile the original source file as a backup mechanism to generate an
   // object file.
   // printf ("In SgFile::compileOutput(): get_unparse_output_filename() = %s \n",get_unparse_output_filename().c_str());
-     if (get_unparse_output_filename().empty() == true)
-        {
+
+  // Compile the original source code file if:
+  //
+  // 1. Unparsing was skipped
+  // 2. The frontend encountered any errors, and the user specified to
+  //    "keep going" with -rose:keep_going.
+  //
+  //    Warning: Apparently, a frontend error code <= 3 indicates an EDG
+  //    frontend warning; however, existing logic says nothing about the
+  //    other language frontends' exit statuses.
+  bool use_original_input_file =
+      (get_unparse_output_filename().empty() == true) ||
+      (
+          (get_project()->get_frontendErrorCode() != 0) &&
+          (get_project()->get_keep_going()));
+
+  if (use_original_input_file)
+  {
+      if (get_unparse_output_filename().empty())
+      {
           ROSE_ASSERT(get_skip_unparse() == true);
-          string outputFilename = get_sourceFileNameWithPath();
-#if 0
-          if (get_skip_unparse() == true)
-             {
-            // We we are skipping the unparsing then we didn't generate an intermediate
-            // file and so we want to compile the original source file.
-               outputFilename = get_sourceFileNameWithPath();
-             }
-            else
-             {
-            // If we did unparse an intermediate file then we want to compile that
-            // file instead of the original source file.
-               outputFilename = "rose_" + get_sourceFileNameWithoutPath();
-             }
-#endif
-          set_unparse_output_filename(outputFilename);
+      }
 
-       // DQ (6/25/2006): I think it is OK to not have an output file name specified.
-       // display ("In SgFile::compileOutput(): get_unparse_output_filename().empty() == true");
+      string outputFilename = get_sourceFileNameWithPath();
+      set_unparse_output_filename(outputFilename);
+  }
 
-       // printf ("Exiting as a test \n");
-       // ROSE_ASSERT(false);
-        }
-#endif
-
-     ROSE_ASSERT (get_unparse_output_filename().empty() == false);
+  ROSE_ASSERT (get_unparse_output_filename().empty() == false);
 
   // Now call the compiler that rose is replacing
   // if (get_useBackendOnly() == false)
@@ -4721,6 +4783,15 @@ SgProject::compileOutput()
             // int localErrorCode = file.compileOutput(i, compilerName);
             // int localErrorCode = file.compileOutput(0, compilerName);
                int localErrorCode = file.compileOutput(0);
+
+            if (localErrorCode > 0)
+            {
+                std::cout
+                    << "[ERROR] "
+                    << "Failed to compile file "
+                    << "'" << file.getFileName() << "'"
+                    << std::endl;
+            }
 
                if (localErrorCode > errorCode)
                     errorCode = localErrorCode;
