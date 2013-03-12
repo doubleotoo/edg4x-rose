@@ -13815,9 +13815,21 @@ SgProject::SgProject( const SgProject & project )
      ROSE_ABORT();
    }
 
+
+#include <setjmp.h>
+#include <signal.h>
+#include <stdio.h>
+#include <unistd.h>
+sigjmp_buf rose__sgproject_parse_mark;
+static void HandleFrontendSignal(int sig)
+{
+  std::cout << "[SIGNAL] Caught frontend signal='" << sig << "'" << std::endl;
+  siglongjmp(rose__sgproject_parse_mark, -1);
+}
+
 //! constructor invokes EDG front end and creates AST. Use frontend() instead.
 SgProject::SgProject ( int argc, char** argv, bool frontendConstantFolding)
-   {
+{
      initialization();
 
   // DQ (9/18/2011): Added support to use frontend specific constnat folding (applies to C/C++ using EDG).
@@ -13828,9 +13840,20 @@ SgProject::SgProject ( int argc, char** argv, bool frontendConstantFolding)
      p_frontendConstantFolding = frontendConstantFolding;
 
      std::vector<std::string> argvList(argv, argv + argc);
+
+  struct sigaction act;
+  act.sa_handler = HandleFrontendSignal;
+  sigemptyset(&act.sa_mask);
+  act.sa_flags = 0;
+  sigaction(SIGSEGV, &act, 0);
+  if (sigsetjmp(rose__sgproject_parse_mark, 0) == -1) {
+      std::cout << "[SIGNAL] Ignored frontend failure" << std::endl;
+  }
+  else {
      int errorCode = parse(argvList);
      set_frontendErrorCode(errorCode);
-   }
+  }
+}
 
 //! constructor invokes EDG front end and creates AST. Use frontend() instead.
 SgProject::SgProject ( const std::vector<std::string>& argv, bool frontendConstantFolding )

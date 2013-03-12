@@ -51,12 +51,12 @@ main(int argc, char* argv[])
       }
       else if (arg.find("-") == 0)
       {
-          std::cout
-              << "[WARN] [" << program_name << "] "
-              << "Unknown commandline switch: "
-              << "'" << arg << "' "
-              << "(passing to ROSE CLI)"
-              << std::endl;
+          //std::cout
+          //    << "[WARN] [" << program_name << "] "
+          //    << "Unknown commandline switch: "
+          //    << "'" << arg << "' "
+          //    << "(passing to ROSE CLI)"
+          //    << std::endl;
           rose_cmdline.push_back(arg);
       }
       else

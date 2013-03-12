@@ -4448,6 +4448,17 @@ SgSourceFile::buildAST( vector<string> argv, vector<string> inputCommandLine )
   return frontendErrorLevel;
 }
 
+#include <setjmp.h>
+#include <signal.h>
+#include <stdio.h>
+#include <unistd.h>
+sigjmp_buf rose__sgfile_compileoutput_mark;
+static void HandleCompileOutputSignal(int sig)
+{
+  std::cout << "[SIGNAL] Caught signal='" << sig << "'" << std::endl;
+  siglongjmp(rose__sgfile_compileoutput_mark, -1);
+}
+
 // DQ (10/14/2010): Removing reference to macros defined in rose_config.h (defined in the header file as a default parameter).
 // int SgFile::compileOutput ( vector<string>& argv, int fileNameIndex, const string& compilerNameOrig )
 int
@@ -4537,14 +4548,42 @@ SgFile::compileOutput ( vector<string>& argv, int fileNameIndex )
   //    Warning: Apparently, a frontend error code <= 3 indicates an EDG
   //    frontend warning; however, existing logic says nothing about the
   //    other language frontends' exit statuses.
-  bool use_original_input_file =
-      (get_unparse_output_filename().empty() == true) ||
-      (
-          (get_project()->get_frontendErrorCode() != 0) &&
-          (get_project()->get_keep_going()));
+
+  bool use_original_input_file = false;
+
+  struct sigaction act;
+  act.sa_handler = HandleCompileOutputSignal;
+  sigemptyset(&act.sa_mask);
+  act.sa_flags = 0;
+  sigaction(SIGSEGV, &act, 0);
+  if (sigsetjmp(rose__sgfile_compileoutput_mark, 0) == -1) {
+      std::cout << "[SIGNAL] Ignored SgFile::compileOutput failure" << std::endl;
+      use_original_input_file = true;
+  }
+  else {
+      use_original_input_file =
+          (get_unparse_output_filename().empty() == true) ||
+          (
+              (
+                  get_project()->get_frontendErrorCode() != 0 ||
+                  this->get_unparserErrorCode() != 0
+              ) &&
+              (
+                  get_project()->get_keep_going()
+              )
+          );
+  }
 
   if (use_original_input_file)
   {
+      if (SgProject::get_verbose() >= 1)
+      {
+          std::cout
+              << "[WARN] "
+              << "Compiling the original input file -- there must "
+              << "have been an internal ROSE error."
+      }
+
       if (get_unparse_output_filename().empty())
       {
           ROSE_ASSERT(get_skip_unparse() == true);
