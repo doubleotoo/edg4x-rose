@@ -1277,19 +1277,16 @@ determineFileType ( vector<string> argv, int & nextErrorCode, SgProject* project
       //========================================================================
       nextErrorCode = file->callFrontEnd();
 
-      // Warnings from EDG processing are OK but not errors
-      if (nextErrorCode <= 3)
-      {
-          if (SgProject::get_verbose() >= 1)
-          {
-              std::cout
-                  << "[INFO] "
-                  << "Finished running frontend on file "
-                  << "'" << file->getFileName() << "'"
-                  << std::endl;
-          }
-      }
-      else
+#ifdef ROSE_USE_NEW_EDG_INTERFACE
+  // Any non-zero value indicates an error.
+  int frontend_failed = (nextErrorCode != 0);
+#else
+  // non-zero error code can mean warnings were produced, values greater
+  // than 3 indicate errors.
+  int frontend_failed = (nextErrorCode > 3);
+#endif
+
+      if (frontend_failed)
       {
           if (file->get_project()->get_keep_going() == true)
           {
@@ -1303,6 +1300,17 @@ determineFileType ( vector<string> argv, int & nextErrorCode, SgProject* project
           else
           {
               ROSE_ASSERT(! "[FATAL] We encountered a Frontend failure");
+          }
+      }
+      else
+      {
+          if (SgProject::get_verbose() >= 1)
+          {
+              std::cout
+                  << "[INFO] "
+                  << "Finished running frontend on file "
+                  << "'" << file->getFileName() << "'"
+                  << std::endl;
           }
       }
   }
@@ -1341,6 +1349,16 @@ extern void jserver_init();
 // #endif // USE_ROSE_OPEN_FORTRAN_PARSER_SUPPORT
 #endif
 
+#include <setjmp.h>
+#include <signal.h>
+#include <stdio.h>
+#include <unistd.h>
+static sigjmp_buf rose__sgproject_frontend_mark;
+static void HandleUnparserSignal(int sig)
+{
+  std::cout << "[SIGNAL] Caught unparser signal='" << sig << "'" << std::endl;
+  siglongjmp(rose__sgproject_frontend_mark, -1);
+}
 //! internal function to invoke the EDG frontend and generate the AST
 int
 SgProject::parse(const vector<string>& argv)
@@ -1358,6 +1376,18 @@ SgProject::parse(const vector<string>& argv)
      processCommandLine(argv);
 
      int errorCode = 0;
+  // TODO: only catch signals if keep_going is enabled
+  struct sigaction act;
+  act.sa_handler = HandleUnparserSignal;
+  sigemptyset(&act.sa_mask);
+  act.sa_flags = 0;
+  sigaction(SIGSEGV, &act, 0);
+  sigaction(SIGABRT, &act, 0);
+  if (sigsetjmp(rose__sgproject_frontend_mark, 0) == -1) {
+      std::cout << "[SIGNAL] [SgProject::parse] Ignoring parser failure" << std::endl;
+      errorCode = 1;
+  }
+  else {
 
   // DQ (7/7/2005): Added support for AST Merge Mechanism
      if (p_astMerge == true)
@@ -1508,7 +1538,7 @@ SgProject::parse(const vector<string>& argv)
      ROSE_ASSERT(SgNode::get_globalTypeTable() != NULL);
      ROSE_ASSERT(SgNode::get_globalTypeTable()->get_parent() != NULL);
 #endif
-
+}
      return errorCode;
    }
 
@@ -4581,7 +4611,7 @@ SgFile::compileOutput ( vector<string>& argv, int fileNameIndex )
           std::cout
               << "[WARN] "
               << "Compiling the original input file -- there must "
-              << "have been an internal ROSE error."
+              << "have been an internal ROSE error.";
       }
 
       if (get_unparse_output_filename().empty())

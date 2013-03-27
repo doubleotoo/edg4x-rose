@@ -1835,18 +1835,7 @@ unparseFile ( SgFile* file, UnparseFormatHelp *unparseHelp, UnparseDelegate* unp
                case V_SgSourceFile:
                   {
                     SgSourceFile* sourceFile = isSgSourceFile(file);
-  struct sigaction act;
-  act.sa_handler = HandleUnparserSignal;
-  sigemptyset(&act.sa_mask);
-  act.sa_flags = 0;
-  sigaction(SIGSEGV, &act, 0);
-  if (sigsetjmp(rose__sgproject_unparse_mark, 0) == -1) {
-      std::cout << "[SIGNAL] Ignored unparser failure" << std::endl;
-      file->set_unparserErrorCode(1);
-  }
-  else {
                     roseUnparser.unparseFile(sourceFile,inheritedAttributeInfo, unparseScope);
-  }
                     break;
                   }
 
