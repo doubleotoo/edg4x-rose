@@ -24,7 +24,7 @@ generateNameQualificationSupport( SgNode* node, std::set<SgNode*> & referencedNa
   // These are passed by reference and references are stored to them in 
   // the NameQualificationTraversal class.
 
-     TimingPerformance timer ("Name qualification support:");
+     //TimingPerformance timer ("Name qualification support:");
 
   // DQ (5/28/2011): Initialize the local maps to the static maps in SgNode.  This is requires so the
   // types used in template arguments can call the unparser to support there generation of name qualified 

@@ -721,6 +721,16 @@ SgSourceFile::initializeGlobalScope()
         }
    }
 
+#include <setjmp.h>
+#include <signal.h>
+#include <stdio.h>
+#include <unistd.h>
+sigjmp_buf rose__sgproject_parse_mark;
+static void HandleFrontendSignal(int sig)
+{
+  std::cout << "[SIGNAL] Caught frontend signal='" << sig << "'" << std::endl;
+  siglongjmp(rose__sgproject_parse_mark, -1);
+}
 
 SgFile*
 #if 0
@@ -1264,7 +1274,29 @@ determineFileType ( vector<string> argv, int & nextErrorCode, SgProject* project
      if ( file != NULL && isSgUnknownFile(file) == NULL )
         {
        // printf ("Calling file->callFrontEnd() \n");
+
+
+  struct sigaction act;
+  act.sa_handler = HandleFrontendSignal;
+  sigemptyset(&act.sa_mask);
+  act.sa_flags = 0;
+  sigaction(SIGSEGV, &act, 0);
+  sigaction(SIGABRT, &act, 0);
+  if (sigsetjmp(rose__sgproject_parse_mark, 0) == -1) {
+      std::cout << "[SIGNAL] Ignored frontend failure" << std::endl;
+      file->set_frontendErrorCode(-1);
+  }
+  else {
+    try{
           nextErrorCode = file->callFrontEnd();
+    }
+    catch (...) {
+      std::cout << "Caught frontend exception" << std::endl;
+      file->set_frontendErrorCode(-1);
+    }
+
+  }
+
        // printf ("DONE: Calling file->callFrontEnd() \n");
           ROSE_ASSERT ( nextErrorCode <= 3);
         }
@@ -4464,24 +4496,34 @@ SgFile::compileOutput ( vector<string>& argv, int fileNameIndex )
   // unparse and we want to compile the original source file as a backup mechanism to generate an
   // object file.
   // printf ("In SgFile::compileOutput(): get_unparse_output_filename() = %s \n",get_unparse_output_filename().c_str());
-     if (get_unparse_output_filename().empty() == true)
+#endif
+
+  // Compile the original source code file if:
+  //
+  // 1. Unparsing was skipped
+  // 2. The frontend encountered any errors, and the user specified to
+  //    "keep going" with -rose:keep_going.
+  //
+  //    Warning: Apparently, a frontend error code <= 3 indicates an EDG
+  //    frontend warning; however, existing logic says nothing about the
+  //    other language frontends' exit statuses.
+  bool use_original_input_file = false;
+  use_original_input_file =
+      (get_unparse_output_filename().empty() == true) ||
+      (
+          (
+              this->get_frontendErrorCode() != 0 ||
+              this->get_unparserErrorCode() != 0
+          )// &&
+          //(
+          //    get_project()->get_keep_going()
+          //)
+      );
+
+     if (use_original_input_file)
         {
           ROSE_ASSERT(get_skip_unparse() == true);
           string outputFilename = get_sourceFileNameWithPath();
-#if 0
-          if (get_skip_unparse() == true)
-             {
-            // We we are skipping the unparsing then we didn't generate an intermediate
-            // file and so we want to compile the original source file.
-               outputFilename = get_sourceFileNameWithPath();
-             }
-            else
-             {
-            // If we did unparse an intermediate file then we want to compile that
-            // file instead of the original source file.
-               outputFilename = "rose_" + get_sourceFileNameWithoutPath();
-             }
-#endif
           set_unparse_output_filename(outputFilename);
 
        // DQ (6/25/2006): I think it is OK to not have an output file name specified.
@@ -4490,7 +4532,6 @@ SgFile::compileOutput ( vector<string>& argv, int fileNameIndex )
        // printf ("Exiting as a test \n");
        // ROSE_ASSERT(false);
         }
-#endif
 
      ROSE_ASSERT (get_unparse_output_filename().empty() == false);
 
@@ -4542,6 +4583,11 @@ SgFile::compileOutput ( vector<string>& argv, int fileNameIndex )
 #else
        // DQ (2/20/2013): The timer used in TimingPerformance is now fixed to properly record elapsed wall clock time.
           returnValueForCompiler = systemFromVector (compilerNameString);
+          if (returnValueForCompiler != 0)
+          {
+              this->set_frontendErrorCode(-1);
+              returnValueForCompiler = this->compileOutput(argv, fileNameIndex);
+          }
 #endif
         }
        else
@@ -4604,7 +4650,7 @@ int
 SgProject::compileOutput()
    {
   // DQ (7/6/2005): Introduce tracking of performance of ROSE.
-     TimingPerformance timer ("AST Backend Compilation (SgProject):");
+     //TimingPerformance timer ("AST Backend Compilation (SgProject):");
 
      int errorCode = 0;
      int linkingReturnVal = 0;
