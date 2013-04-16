@@ -10,6 +10,7 @@
 #include <algorithm>
 
 #include <boost/filesystem.hpp>
+#include <boost/foreach.hpp>
 
 #include "sage_support.h"
 
@@ -733,6 +734,82 @@ static void HandleFrontendSignal(int sig)
 {
   std::cout << "[WARN] Caught frontend signal='" << sig << "'" << std::endl;
   siglongjmp(rose__sgproject_parse_mark, -1);
+}
+sigjmp_buf rose__sgproject_parse_mark2;
+static void HandleFrontendSignal2(int sig)
+{
+  std::cout << "[WARN] Caught frontend signal='" << sig << "'" << std::endl;
+  siglongjmp(rose__sgproject_parse_mark2, -1);
+}
+
+SgSourceFile*
+CreateJavaFile(std::vector<std::string> argv, SgProject* project)
+{
+  // TODO: add sanity check that argv/project is Java
+
+  SgSourceFile* file = new SgSourceFile (argv, project);
+  ROSE_ASSERT(file != NULL);
+
+  // This a not a C++ file (assume it is a C file and don't define the
+  // __cplusplus macro, just like GNU gcc would).
+  file->set_sourceFileUsesCppFileExtension(false);
+  file->set_outputLanguage(SgFile::e_Java_output_language);
+  file->set_Java_only(true);
+  // DQ (4/2/2011): Java code is only compiled, not linked as
+  // is C/C++ and Fortran.
+  file->set_compileOnly(true);
+  // DQ (12/23/2008): This is the eariliest point where the global
+  // scope can be set.
+  // Note that file->get_requires_C_preprocessor() should be false.
+  ROSE_ASSERT(file->get_requires_C_preprocessor() == false);
+  file->initializeGlobalScope();
+
+  return file;
+}
+
+// TO-DO: This function is intended to eventually replace the
+// monolithic determineFileType function.
+std::vector<SgFile*>
+CreateFiles(
+    std::vector<std::string> argv,
+    SgProject* project)
+{
+  ROSE_ASSERT(project != NULL);
+
+  // Get the list of filenames from the commandline
+  std::vector<std::string> fileList =
+      CommandlineProcessing::generateSourceFilenames(
+          argv,
+          project->get_binary_only());
+  ROSE_ASSERT(fileList.empty() == false);
+
+  // Create one SgFile for each filename on the commandline,
+  // according to their respective file types.
+  std::vector<SgFile*> files;
+  BOOST_FOREACH(std::string filename, fileList)
+  {
+      filename =
+          StringUtility::getAbsolutePathFromRelativePath(filename, true);
+      string filenameExtension =
+          StringUtility::fileNameSuffix(filename);
+
+      if (CommandlineProcessing::isJavaFileNameSuffix(filenameExtension))
+      {
+          SgSourceFile* file = CreateJavaFile(argv, project);
+          ROSE_ASSERT(file != NULL);
+
+          files.push_back(file);
+      }
+      else
+      {
+          ROSE_ASSERT(! "Not implemented yet");
+      }
+  }
+
+  // TODO: Add sanity check that all files on the commandline
+  //       are of the same type?
+
+  return files;
 }
 
 SgFile*
@@ -1624,6 +1701,88 @@ SgBinaryComposite::SgBinaryComposite ( vector<string> & argv ,  SgProject* proje
 #endif
 }
 
+int
+SgProject::ParseWithOneCommandline()
+{
+  // Currently only implemented with the Java one-commandline use case
+  ROSE_ASSERT(this->get_one_cmdline() == true);
+
+  int status = 0;
+
+  // This commandline contains all the input filenames
+  std::vector<std::string> argv =
+      get_originalCommandLineArgumentList();
+
+  // Create an SgFile for each input filename on the commandline
+  std::vector<SgFile*> files = CreateFiles(argv, this);
+  ROSE_ASSERT(files.size() != 0);
+
+  // Add each SgFile to this SgProject's list of files
+  BOOST_FOREACH(SgFile* file, files)
+  {
+      ROSE_ASSERT(file->get_startOfConstruct() != NULL);
+      ROSE_ASSERT(file->get_parent() != NULL);
+      this->set_file(*file);
+  }
+
+  // Call the frontend using only one SgFile -
+  // this SgFile will be used to attach the entire
+  // SgProject's AST (?).
+  {
+      SgFile* file = files.front();
+
+      if (this->get_keep_going())
+      {
+          struct sigaction act;
+          act.sa_handler = HandleFrontendSignal2;
+          sigemptyset(&act.sa_mask);
+          act.sa_flags = 0;
+          sigaction(SIGSEGV, &act, 0);
+          sigaction(SIGABRT, &act, 0);
+      }
+
+      if (sigsetjmp(rose__sgproject_parse_mark2, 0) == -1)
+      {
+          std::cout
+              << "[WARN] Ignoring frontend failure "
+              << " as directed by -rose:keep_going"
+              << std::endl;
+          file->set_frontendErrorCode(-1);
+      }
+      else
+      {
+          try
+          {
+              status = file->callFrontEnd();
+          }
+          catch (...)
+          {
+              std::cout << "[WARN] Caught frontend exception" << std::endl;
+              if (this->get_keep_going())
+              {
+                  file->set_frontendErrorCode(-1);
+              }
+              else
+              {
+                  throw;
+              }
+          }
+      }
+  }
+
+  #ifndef ROSE_USE_CLANG_FRONTEND
+  if ((get_fileList().empty() == false) &&
+      (get_useBackendOnly() == false))
+  {
+      AstPostProcessing(this);
+  }
+  #endif
+
+  // skipped secondaryPassOverSourceFile
+  // skipped unparseHeaderFiles
+
+  return status;
+}
 
 int
 SgProject::parse()
@@ -1651,6 +1810,13 @@ SgProject::parse()
      printf ("Loop through the source files on the command line! p_sourceFileNameList = %zu \n",p_sourceFileNameList.size());
 #endif
 
+  // TOO1 (04/15/2013): TODO: Implemented for Java only
+  if (this->get_one_cmdline() == true)
+  {
+      this->ParseWithOneCommandline();
+  }
+  else
+  {
      Rose_STL_Container<string>::iterator nameIterator = p_sourceFileNameList.begin();
      unsigned int i = 0;
      while (nameIterator != p_sourceFileNameList.end())
@@ -1820,6 +1986,7 @@ SgProject::parse()
   // DQ (5/22/2007): Moved to astPostProcessing
   // DQ (5/8/2007): Now build the hidden lists for types and declarations (Robert Preissl's work)
   // buildHiddenTypeAndDeclarationLists(this);
+  }
 
      return errorCode;
    }
@@ -3669,7 +3836,25 @@ SgSourceFile::build_Java_AST( vector<string> argv, vector<string> inputCommandLi
                   ROSE_ASSERT(false);
           }
 
-          javaCommandLine.push_back(get_sourceFileNameWithPath());
+  // Append the source filenames to the commandline
+  if (this->get_project()->get_one_cmdline() == true)
+  {
+      // Get the list of filenames from the commandline
+      std::vector<std::string> fileList =
+          CommandlineProcessing::generateSourceFilenames(
+              argv,
+              this->get_project()->get_binary_only());
+      ROSE_ASSERT(fileList.empty() == false);
+
+      BOOST_FOREACH(std::string filename, fileList)
+      {
+          javaCommandLine.push_back(filename);
+      }
+  }
+  else
+  {
+      javaCommandLine.push_back(get_sourceFileNameWithPath());
+  }
 
        // At this point we have the full command line with the source file name
           if (get_verbose() > 1)
@@ -3771,8 +3956,25 @@ SgSourceFile::build_Java_AST( vector<string> argv, vector<string> inputCommandLi
   // Java does not use include files, so we can enforce this.
      ROSE_ASSERT(get_project()->get_includeDirectorySpecifierList().empty() == true);
 
-  // Add the source file as the last argument on the command line (checked by intermediate testing before calling ECJ).
-     frontEndCommandLine.push_back(get_sourceFileNameWithPath());
+  // Append the source filenames to the commandline
+  if (this->get_project()->get_one_cmdline() == true)
+  {
+      // Get the list of filenames from the commandline
+      std::vector<std::string> fileList =
+          CommandlineProcessing::generateSourceFilenames(
+              argv,
+              this->get_project()->get_binary_only());
+      ROSE_ASSERT(fileList.empty() == false);
+
+      BOOST_FOREACH(std::string filename, fileList)
+      {
+          frontEndCommandLine.push_back(filename);
+      }
+  }
+  else
+  {
+      frontEndCommandLine.push_back(get_sourceFileNameWithPath());
+  }
 
      if ( get_verbose() > 0 )
           printf ("Java numberOfCommandLineArguments = %zu frontEndCommandLine = %s \n",inputCommandLine.size(),CommandlineProcessing::generateStringFromArgList(frontEndCommandLine,false,false).c_str());

@@ -3057,7 +3057,10 @@ SgFile::stripFortranCommandLineOptions ( vector<string> & argv )
 
 void
 SgFile::stripJavaCommandLineOptions ( vector<string> & argv )
-   {
+{
+  // Remove ROSE-specific commandline options
+  sla(argv, "-rose:", "($)", "(java:one_cmdline)", 1);
+
      // Need to rewrite rose:java-prefixed options before handing them to the backend.
      string javaRosePrefix = "-rose:java:";
      Rose_STL_Container<string> rose_java_options =
@@ -3067,14 +3070,11 @@ SgFile::stripJavaCommandLineOptions ( vector<string> & argv )
          if (*i == "-ds") {
            // Removes -ds as javac wouldn't know what to do with it.
            i++;
-         } else if (*i == "-one_cmdline") {
-           // ROSE-specific commandline
-           i++;
          } else {
            argv.push_back(*i);
          }
        }
-   }
+}
 
 Rose_STL_Container<string>
 CommandlineProcessing::generateOptionListWithDeclaredParameters (const Rose_STL_Container<string> & argList, string inputPrefix )

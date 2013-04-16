@@ -5283,6 +5283,7 @@ HEADER_APPLICATION_PROJECT_START
 
       //! parse input file(s)
           int parse();
+          int ParseWithOneCommandline();
 
       //! processes command line and parses all files.
       //! Error code can be accessed using get_frontendErrorCode()
