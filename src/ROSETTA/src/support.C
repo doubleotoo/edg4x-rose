@@ -1656,6 +1656,14 @@ Grammar::setUpSupport ()
   // DQ (10/11/2010): Added initial Java support.
      Project.setDataPrototype ( "bool", "Java_only", "= false",
             NO_CONSTRUCTOR_PARAMETER, NO_ACCESS_FUNCTIONS, NO_TRAVERSAL, NO_DELETE);
+  // TOO1 (4/18/2013): Java has a single Global Scope; unlike C/C++ there is no
+  //                   concept of file-level global scopes. The SgProject will
+  //                   be the primary holder of the shared SgGlobal, while each
+  //                   SgFile will simply hold a pointer to this SgGlobal.
+     Project.setDataPrototype ( "SgGlobal*", "java_global_scope", "= false",
+            NO_CONSTRUCTOR_PARAMETER, BUILD_ACCESS_FUNCTIONS, DEF_TRAVERSAL, NO_DELETE);
+     File.setDataPrototype ( "SgGlobal*", "java_global_scope", "= false",
+            NO_CONSTRUCTOR_PARAMETER, BUILD_ACCESS_FUNCTIONS, NO_TRAVERSAL, NO_DELETE);
 
      Project.setDataPrototype ( "bool", "X10_only", "= false",
             NO_CONSTRUCTOR_PARAMETER, NO_ACCESS_FUNCTIONS, NO_TRAVERSAL, NO_DELETE);

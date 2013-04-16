@@ -5290,6 +5290,11 @@ HEADER_APPLICATION_PROJECT_START
           int parse (const std::vector<std::string>& argv);
           int parse (int argc, char** argv) { return parse(std::vector<std::string>(argv, argv + argc)); }
 
+          int CallFrontEnd(std::vector<std::string> argv);
+          int BuildAst(std::vector<std::string> argv);
+          int BuildAstForJava(std::vector<std::string> argv);
+          void InitializeGlobalScopeForJava();
+
      public:
 
       //! default constructor (not meant to be used)

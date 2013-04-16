@@ -746,6 +746,15 @@ SgSourceFile*
 CreateJavaFile(std::vector<std::string> argv, SgProject* project)
 {
   // TODO: add sanity check that argv/project is Java
+  // Sanity Checking
+  {
+      #ifndef ROSE_BUILD_JAVA_LANGUAGE_SUPPORT
+        ROSE_ASSERT (! "[FATAL] [ROSE] [Java] "
+                       "ROSE was not configured to support the Java frontend.");
+      #endif
+      ROSE_ASSERT(project != NULL);
+      ROSE_ASSERT(argv.size() > 0);
+  }
 
   SgSourceFile* file = new SgSourceFile (argv, project);
   ROSE_ASSERT(file != NULL);
@@ -762,7 +771,28 @@ CreateJavaFile(std::vector<std::string> argv, SgProject* project)
   // scope can be set.
   // Note that file->get_requires_C_preprocessor() should be false.
   ROSE_ASSERT(file->get_requires_C_preprocessor() == false);
-  file->initializeGlobalScope();
+
+  // Java Specification:
+  //
+  //    TOO1 (04/16/2013) Requirements as per Rice University (Philippe Charles):
+  //
+  //    Java has a single Global Scope, unlike C/C++ where each individual file
+  //    has its own Global Scope.
+  //
+  //    Therefore, we want to have one Global Scope that is shared amongst all
+  //    of the Java SgFile objects, and this SgProject.
+  //
+  //    However, for sake of symmetry, each file will still need its own SgGlobal
+  //    that will hold all of the file's information (file info, declarations, etc.)
+  //
+  {
+      file->initializeGlobalScope();
+
+      SgGlobal* globalScope = project->get_java_global_scope();
+      ROSE_ASSERT(globalScope != NULL);
+      file->set_java_global_scope(globalScope);
+  }
+
 
   return file;
 }
@@ -774,7 +804,11 @@ CreateFiles(
     std::vector<std::string> argv,
     SgProject* project)
 {
-  ROSE_ASSERT(project != NULL);
+  // Sanity Checking
+  {
+      ROSE_ASSERT(project != NULL);
+      ROSE_ASSERT(argv.size() > 0);
+  }
 
   // Get the list of filenames from the commandline
   std::vector<std::string> fileList =
@@ -1753,7 +1787,7 @@ SgProject::ParseWithOneCommandline()
       {
           try
           {
-              status = file->callFrontEnd();
+              status = this->CallFrontEnd(argv);
           }
           catch (...)
           {
@@ -1809,6 +1843,19 @@ SgProject::parse()
 #if 0
      printf ("Loop through the source files on the command line! p_sourceFileNameList = %zu \n",p_sourceFileNameList.size());
 #endif
+
+  // TOO1 (4/18/2013)
+  // TODO: This is not defined yet because commandline processing
+  //       hasn't occurred. Need to move from SgProject::CallFrontEnd.
+  //if (this->get_Java_only())
+  //{
+      #ifdef ROSE_BUILD_JAVA_LANGUAGE_SUPPORT
+      // This shared global scope must be initialized before the
+      // individual SgFile objects are created, since they
+      // will all share it.
+      this->InitializeGlobalScopeForJava();
+      #endif
+  //}
 
   // TOO1 (04/15/2013): TODO: Implemented for Java only
   if (this->get_one_cmdline() == true)
@@ -2169,6 +2216,114 @@ int openJavaParser_main(int argc, char **argv );
 
 // See $ROSE/src/frontend/X10_ROSE_Connection
 extern int x10_main(int argc, char** argv);
+
+int
+SgProject::CallFrontEnd(std::vector<std::string> argv)
+{
+    // TODO: move to an earlier position in the workflow
+    // Set each SgFile's attributes based on the user's
+    // commandline options.
+    {
+        SgFilePtrList fileList = this->get_fileList();
+        BOOST_FOREACH(SgFile* file, fileList)
+        {
+            std::vector<std::string> localArgv = argv;
+            file->processRoseCommandLineOptions(localArgv);
+            file->processBackendSpecificCommandLineOptions(localArgv);
+
+            // Hack:
+            // Set the project's commandline, post file-level commandline
+            // processing.
+        }
+    }
+
+    this->BuildAst(argv);
+}
+
+int
+SgProject::BuildAst(std::vector<std::string> argv)
+{
+  int status = 0;
+
+  if (this->get_Java_only() == true)
+  {
+      status = this->BuildAstForJava(argv);
+  }
+  else
+  {
+      ROSE_ASSERT(! "Not implemented yet");
+  }
+
+  return status;
+}
+
+#ifdef ROSE_BUILD_JAVA_LANGUAGE_SUPPORT
+SgProject* gECJ_globalProjectPointer;
+#endif
+
+int
+SgProject::BuildAstForJava(std::vector<std::string> argv)
+{
+  // Sanity Checking
+  {
+      #ifndef ROSE_BUILD_JAVA_LANGUAGE_SUPPORT
+        ROSE_ASSERT (! "[FATAL] [ROSE] [Java] "
+                       "ROSE was not configured to support the Java frontend.");
+      #endif
+  }
+
+  int status = 0;
+
+  // Save this project to a global variable for use
+  // in the JNI.
+  {
+      // defined in ECJ_ROSE_Connection/java_support.h
+      gECJ_globalProjectPointer = this;
+  }
+
+  // Invoke the ECJ frontend compiler
+  {
+      int ecjArgc = 0;
+      char** ecjArgv = NULL;
+      CommandlineProcessing::generateArgcArgvFromList(argv, ecjArgc, ecjArgv);
+      status = openJavaParser_main(ecjArgc, ecjArgv);
+  }
+
+  ROSE_ASSERT(! "Not fully implemented yet");
+  return status;
+}
+
+// TODO: startOfConstructor and endOfConstructor
+//       Do we use a SgSourceFile?
+void
+SgProject::InitializeGlobalScopeForJava()
+{
+  // Sanity Checking
+  {
+      #ifndef ROSE_BUILD_JAVA_LANGUAGE_SUPPORT
+        ROSE_ASSERT (! "[FATAL] [ROSE] [Java] "
+                       "ROSE was not configured to support the Java frontend.");
+      #endif
+
+      ROSE_ASSERT(this != NULL);
+  }
+
+  // Create and save the SgGlobal scope object to this
+  // SgProject.
+  Sg_File_Info* globalScopeFileInfo = new Sg_File_Info("", 0, 0);
+  SgGlobal* globalScope = new SgGlobal(globalScopeFileInfo);
+  {
+      ROSE_ASSERT(globalScope != NULL);
+      this->set_java_global_scope(globalScope);
+  }
+
+  if (SageBuilder::symbol_table_case_insensitive_semantics == true)
+  {
+      globalScope->setCaseInsensitive(true);
+  }
+
+  globalScope->set_parent(this);
+}
 
 int
 SgFile::callFrontEnd()

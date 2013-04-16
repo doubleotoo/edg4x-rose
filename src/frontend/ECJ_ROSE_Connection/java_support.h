@@ -11,8 +11,9 @@ extern SgClassDefinition *ObjectClassDefinition;
 
 extern int initializerCount;
 
-// This is used for both Fortran and Java support to point to the current SgSourceFile.
-extern SgSourceFile *OpenFortranParser_globalFilePointer;
+// Used by JNI code
+// Initialized in src/frontend/SageIII/sage_support/sage_support.cpp
+extern SgProject* gECJ_globalProjectPointer;
 
 #include "jni_JavaSourceCodePosition.h"
 #include "token.h"

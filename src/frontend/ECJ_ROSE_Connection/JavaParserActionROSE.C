@@ -573,30 +573,17 @@ JNIEXPORT void JNICALL Java_JavaParser_cactionCompilationUnitList(JNIEnv *env, j
     if (SgProject::get_verbose() > 0)
         printf ("Inside of Java_JavaParser_cactionCompilationUnitList \n");
 
-    // This is already setup by ROSE as part of basic file initialization before calling ECJ.
-    ROSE_ASSERT(OpenFortranParser_globalFilePointer != NULL);
-    if (SgProject::get_verbose() > 0)
-        printf ("OpenFortranParser_globalFilePointer = %s \n", OpenFortranParser_globalFilePointer -> class_name().c_str());
-
     SageBuilder::setSourcePositionClassificationMode(SageBuilder::e_sourcePositionFrontendConstruction);
 
-    SgSourceFile *sourceFile = isSgSourceFile(OpenFortranParser_globalFilePointer);
-    ROSE_ASSERT(sourceFile != NULL);
-
-    if (SgProject::get_verbose() > 0)
-        printf ("sourceFile -> getFileName() = %s \n", sourceFile -> getFileName().c_str());
-
     // We don't use the SgProject but since it should have already been built, we can verify that it is present.
-    SgProject *project = sourceFile -> get_project();
+    SgProject* project = gECJ_globalProjectPointer;
     ROSE_ASSERT(project != NULL);
 
     // Get the pointer to the global scope and push it onto the astJavaScopeStack.
-    ::globalScope = sourceFile -> get_globalScope();
+    ::globalScope = project->get_java_global_scope();
     ROSE_ASSERT(::globalScope != NULL);
 
-    //
     // At this point, the scope stack should be empty. Push the global scope into it.
-    //
     ROSE_ASSERT(astJavaScopeStack.empty());
     astJavaScopeStack.push(::globalScope); // Push the global scope onto the stack.
 
@@ -694,8 +681,8 @@ JNIEXPORT void JNICALL Java_JavaParser_cactionCompilationUnitDeclaration(JNIEnv 
     // printf ("Inside of Java_JavaParser_cactionCompilationUnitDeclaration absolutePathFilename = %s \n", absolutePathFilename);
     env -> ReleaseStringUTFChars(java_filename, absolutePathFilename);
 
-    // This is already setup by ROSE as part of basic file initialization before calling ECJ.
-    ROSE_ASSERT(OpenFortranParser_globalFilePointer != NULL);
+    // This setup by ROSE as part of project initialization before calling ECJ.
+    ROSE_ASSERT(gECJ_globalProjectPointer != NULL);
 
     astJavaComponentStack.push(astJavaScopeStack.top()); // To mark the end of the list of components in this Compilation unit.
 }
