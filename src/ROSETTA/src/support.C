@@ -1497,6 +1497,9 @@ Grammar::setUpSupport ()
      Project.setDataPrototype("bool", "keep_going", "= false",
                               NO_CONSTRUCTOR_PARAMETER, BUILD_FLAG_ACCESS_FUNCTIONS, NO_TRAVERSAL, NO_DELETE); 
 
+     Project.setDataPrototype("bool", "one_cmdline", "= false",
+                              NO_CONSTRUCTOR_PARAMETER, BUILD_FLAG_ACCESS_FUNCTIONS, NO_TRAVERSAL, NO_DELETE);
+
 
      Project.setDataPrototype("std::string","outputFileName", "= \"\"",
                            NO_CONSTRUCTOR_PARAMETER, BUILD_ACCESS_FUNCTIONS, NO_TRAVERSAL, NO_DELETE);

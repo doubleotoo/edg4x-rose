@@ -643,6 +643,8 @@ SgProject::processCommandLine(const vector<string>& input_argv)
 
   SageSupport::Cmdline::
       ProcessKeepGoing(this, local_commandLineArgumentList);
+  SageSupport::Cmdline::Java::
+      ProcessOneCmdline(this, local_commandLineArgumentList);
 
   //
   // Standard compiler options (allows alternative -E option to just run CPP)
@@ -1155,6 +1157,29 @@ ProcessKeepGoing (SgProject* project, std::vector<std::string>& argv)
 //------------------------------------------------------------------------------
 //                                  Java
 //------------------------------------------------------------------------------
+void
+SageSupport::Cmdline::Java::
+ProcessOneCmdline (SgProject* project, std::vector<std::string>& argv)
+{
+  bool one_cmdline =
+      CommandlineProcessing::isOption(
+          argv,
+          "-rose:java:",
+          "one_cmdline",
+          true);
+
+  if (one_cmdline)
+  {
+      if (SgProject::get_verbose() >= 1)
+          std::cout << "[INFO] [Cmdline] [-rose:java:one_cmdline]" << std::endl;
+
+      project->set_one_cmdline(true);
+  }
+}
+
+//------------------------------------------------------------------------------
+//                                   X10
+//------------------------------------------------------------------------------
 
 void
 SageSupport::Cmdline::X10::
@@ -1248,6 +1273,10 @@ SgFile::usage ( int status )
 "                             Specifies java sources version\n"
 "     -rose:java:target\n"
 "                             Specifies java classes target version\n"
+"     -rose:java:one_cmdline\n"
+"                             When processing multiples files, pass a single commandline\n"
+"                             to the frontend and backend components. This is intended to\n"
+"                             improve the performance of ROSE processing.\n"
 "     -rose:Python, -rose:python, -rose:py\n"
 "                             compile Python code\n"
 "     -rose:OpenMP, -rose:openmp\n"
@@ -3037,6 +3066,9 @@ SgFile::stripJavaCommandLineOptions ( vector<string> & argv )
        {
          if (*i == "-ds") {
            // Removes -ds as javac wouldn't know what to do with it.
+           i++;
+         } else if (*i == "-one_cmdline") {
+           // ROSE-specific commandline
            i++;
          } else {
            argv.push_back(*i);

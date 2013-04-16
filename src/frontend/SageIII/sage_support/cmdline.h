@@ -22,6 +22,11 @@ namespace Cmdline {
   void
   ProcessKeepGoing (SgProject* project, std::vector<std::string>& argv);
 
+  namespace Java {
+    void
+    ProcessOneCmdline (SgProject* project, std::vector<std::string>& argv);
+  }
+
   namespace X10 {
     static std::string option_prefix = "-rose:x10:";
 
