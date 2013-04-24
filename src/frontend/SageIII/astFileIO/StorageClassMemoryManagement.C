@@ -4295,3 +4295,354 @@ ExtentMap EasyStorage<ExtentMap>::rebuildDataStoredInEasyStorageClass() const
      return emap;
    }
 
+/*******************************************************************************
+ * Implementations for EasyStorage <SgSourceFile*>
+ ******************************************************************************/
+void
+EasyStorage<SgSourceFile*> ::
+storeDataInEasyStorageClass(SgSourceFile* file)
+{
+  ROSE_ASSERT(file != NULL);
+
+  SgSourceFileStorageClass* storageClass = new SgSourceFileStorageClass();
+  storageClass->pickOutIRNodeData(file);
+/*
+  long offset = Base::setPositionAndSizeAndReturnOffset(sizeof(*file));
+
+  // if the new data does not fit in the actual block
+  if (offset > 0)
+  {
+      // if there is still space in the actual block
+      if (Base::getSizeOfData() > offset && Base::actual != NULL)
+      {
+          memcpy(
+              Base::actual,
+              *file,
+              (Base::getSizeOfData() - offset) * sizeof(char));
+          copy_ += (Base::getSizeOfData()-offset);
+      }
+      // the data does not fit in one block
+      while (Base::blockSize < (unsigned long)(offset))
+      {
+          Base::actual = Base::getNewMemoryBlock();
+          memcpy(Base::actual, copy_, Base::blockSize*sizeof(char) );
+          offset -= Base::blockSize;
+          copy_ += Base::blockSize;
+      }
+
+      // put the rest of the data in a new memory block
+      Base::actual = Base::getNewMemoryBlock();
+      memcpy(Base::actual, copy_, offset*sizeof(char) );
+      Base::actual += offset;
+  }
+  else
+    {
+   // put the the data in the memory block
+      memcpy(Base::actual, copy_, Base::getSizeOfData()*sizeof(char) );
+      Base::actual += Base::getSizeOfData();
+    }
+*/
+}
+
+
+SgSourceFile* EasyStorage<SgSourceFile*>::rebuildDataStoredInEasyStorageClass() const
+   {
+/*
+     assert ( this != NULL );
+     SgSourceFile* returnInfo  = NULL;
+#if STORAGE_CLASS_MEMORY_MANAGEMENT_CHECK
+     assert ( Base::actualBlock <= 1 );
+     assert ( (0 < Base::getSizeOfData() && Base::actual!= NULL) || ( Base::getSizeOfData() <= 0 ) );
+#endif
+     if ( 0 < Base::getSizeOfData() )
+         {
+        // DQ (4/22/2006): This constructor can not build any IR node or it appears 
+        // that the memory pool will become corrupted resulting the a bad AST.
+           returnInfo = new SgSourceFile();
+           ROSE_ASSERT(returnInfo != NULL);
+        // JH (04/21/2006): Adding the storing of the Sg_File_Info pointer
+        // returnInfo->setFile_Info((Sg_File_Info*)(AST_FILE_IO::getSgClassPointerFromGlobalIndex(fileInfoIndex);
+        // printf ("Using fileInfoIndex = %zu to get Sg_File_Info object \n",fileInfoIndex);
+           returnInfo->set_file_info((Sg_File_Info*)(AST_FILE_IO::getSgClassPointerFromGlobalIndex(fileInfoIndex)));
+#if 0
+           printf ("Check the file Info object just read... \n");
+           printf ("returnInfo = %p \n",returnInfo);
+        // We will be calling the unpacked() functions for attributes later, so at this point the string will be empty.
+           printf ("returnInfo->getString().size() = %zu (ok if empty string: unpacked() functions for attributes called later) \n",returnInfo->getString().size());
+           printf ("returnInfo->getString() = %s (ok if empty string: unpacked() functions for attributes called later) \n",returnInfo->getString().c_str());
+           printf ("returnInfo->get_file_info() = %p \n",returnInfo->get_file_info());
+           printf ("returnInfo->get_file_info()->get_freepointer() = %p \n",returnInfo->get_file_info()->get_freepointer());
+           printf ("returnInfo->get_file_info()->get_freepointer() = %zu \n",(size_t)returnInfo->get_file_info()->get_freepointer());
+#endif
+        // if there is any data in the pool at all
+           if ( Base::actual != NULL  && 0 < Base::getSizeOfData() )
+              {
+                char* data_ = new char[Base::getSizeOfData()];
+#if STORAGE_CLASS_MEMORY_MANAGEMENT_CHECK
+                assert ( Base::memoryBlockList != NULL );
+                assert ( Base::actualBlock == 1 );
+#endif
+                memcpy(data_, Base::getBeginningOfDataBlock(), Base::getSizeOfData() * sizeof(char) );
+                returnInfo->unpacked( data_ );
+              }
+
+           ROSE_ASSERT(returnInfo != NULL);
+        // returnInfo->display("Reconstructed in AST File I/O");
+         }
+
+     return returnInfo;
+*/
+   }
+
+void
+EasyStorage <SgSourceFile*> ::
+arrangeMemoryPoolInOneBlock()
+{
+  // call suitable methods of parent and members
+  StorageClassMemoryManagement <char> :: arrangeMemoryPoolInOneBlock();
+}
+
+void
+EasyStorage <SgSourceFile*> ::
+deleteMemoryPool()
+{
+  // call suitable methods of parent and members
+  StorageClassMemoryManagement <char> :: deleteMemoryPool();
+}
+
+void
+EasyStorage <SgSourceFile*> ::
+writeToFile(std::ostream& outputFileStream)
+{
+  #if FILE_IO_MARKER
+    AST_FILE_IO_MARKER::writeMarker("|09|",outputFileStream);
+  #endif
+
+  // call suitable methods of parent and members
+  StorageClassMemoryManagement <char> :: writeToFile(outputFileStream);
+}
+
+
+void
+EasyStorage <SgSourceFile*> ::
+readFromFile (std::istream& inputFileStream)
+{
+  #if FILE_IO_MARKER
+    AST_FILE_IO_MARKER::readMarker("|09|",inputFileStream);
+  #endif
+
+  // call suitable methods of parent and members
+  StorageClassMemoryManagement <char> :: readFromFile (inputFileStream);
+}
+
+/*******************************************************************************
+ * Implementations for EasyStorage <std::map<std::string, SgSourceFile*> >
+ ******************************************************************************/
+void
+EasyStorage <std::map<std::string, SgSourceFile*> > ::
+storeDataInEasyStorageClass(const std::map<std::string, SgSourceFile*>& data)
+{
+  if (data.empty())
+  {
+      Base::sizeOfData = -1;
+  }
+  else
+  {
+      typedef std::map<std::string, SgSourceFile*> StorageType;
+      StorageType::const_iterator dataIterator = data.begin();
+
+      long offset = Base::setPositionAndSizeAndReturnOffset(data.size()) ;
+      // if the new data does not fit in the actual block
+      if (0 < offset)
+      {
+          // if there is still space in the actual block
+          if (offset < Base::getSizeOfData())
+          {
+              if (Base::actual != NULL)
+              {
+                  for ( ;
+                        (unsigned long)(Base::actual - Base::getBeginningOfActualBlock()) < Base::blockSize;
+                        ++Base::actual, ++dataIterator)
+                  {
+                      Base::actual->storeDataInEasyStorageClass(dataIterator->first, dataIterator->second);
+                  }
+              }
+          }
+          // the data does not fit in one block
+          while (Base::blockSize < (unsigned long)(offset))
+          {
+              Base::actual = Base::getNewMemoryBlock();
+              for ( ;
+                    (unsigned long)(Base::actual - Base::getBeginningOfActualBlock()) < Base::blockSize;
+                    ++Base::actual, ++dataIterator)
+              {
+                  Base::actual->storeDataInEasyStorageClass(dataIterator->first, dataIterator->second);
+              }
+              offset -= Base::blockSize;
+          }
+          Base::actual = Base::getNewMemoryBlock();
+      }
+      for ( ; dataIterator != data.end(); ++dataIterator, ++Base::actual)
+      {
+          Base::actual->storeDataInEasyStorageClass(dataIterator->first, dataIterator->second);
+      }
+   }
+}
+
+std::map<std::string, SgSourceFile*>
+EasyStorage <std::map<std::string, SgSourceFile*> > ::
+rebuildDataStoredInEasyStorageClass() const
+{
+  std::map<std::string, SgSourceFile*> returnMap;
+  if (Base::getSizeOfData() != -1 )
+  {
+      #if STORAGE_CLASS_MEMORY_MANAGEMENT_CHECK
+          assert(Base::actualBlock <= 1);
+          assert((
+                    0 < Base::getSizeOfData() &&
+                    Base::actual!= NULL
+                  ) ||
+                  (
+                    Base::getSizeOfData() <= 0
+                  )
+                );
+      #endif
+
+      // if the memory pool is valid
+      if ( Base::actual != NULL && 0 < Base::getSizeOfData() )
+      {
+          std::pair<std::string, SgSourceFile*> tempPair;
+          EasyStorageMapEntry<std::string, SgSourceFile*>* pointer =
+              Base::getBeginningOfDataBlock();
+
+          for (long i=0; i < Base::getSizeOfData(); ++i)
+          {
+              assert(Base::actualBlock == 1);
+              tempPair = (pointer+i) -> rebuildDataStoredInEasyStorageClass();
+              returnMap[tempPair.first] = tempPair.second;
+          }
+      }
+  }
+  return returnMap;
+}
+
+void
+EasyStorage <std::map<std::string, SgSourceFile*> > ::
+arrangeMemoryPoolInOneBlock()
+{
+  // call suitable methods on members and base class
+  StorageClassMemoryManagement< EasyStorageMapEntry<std::string, SgSourceFile*> > :: arrangeMemoryPoolInOneBlock();
+  EasyStorageMapEntry<std::string, SgSourceFile*> :: arrangeMemoryPoolInOneBlock();
+}
+
+
+void
+EasyStorage <std::map<std::string, SgSourceFile*> > ::
+deleteMemoryPool()
+{
+  // call suitable methods on members and base class
+  StorageClassMemoryManagement< EasyStorageMapEntry<std::string, SgSourceFile*> > :: deleteMemoryPool();
+  EasyStorageMapEntry<std::string, SgSourceFile*> :: deleteMemoryPool();
+}
+
+
+void
+EasyStorage <std::map<std::string, SgSourceFile*> > ::
+writeToFile(std::ostream& outputFileStream)
+{
+  #if FILE_IO_MARKER
+    AST_FILE_IO_MARKER::writeMarker("|34|",outputFileStream);
+  #endif
+
+  // call suitable methods on members and base class
+  StorageClassMemoryManagement< EasyStorageMapEntry<std::string, SgSourceFile*> > :: writeToFile(outputFileStream);
+  EasyStorageMapEntry<std::string, SgSourceFile*> :: writeToFile(outputFileStream);
+}
+
+
+void
+EasyStorage <std::map<std::string, SgSourceFile*> > ::
+readFromFile (std::istream& inputFileStream)
+{
+  #if FILE_IO_MARKER
+    AST_FILE_IO_MARKER::readMarker("|34|",inputFileStream);
+  #endif
+
+  // call suitable methods on members and base class
+  StorageClassMemoryManagement< EasyStorageMapEntry<std::string, SgSourceFile*> > :: readFromFile (inputFileStream);
+  EasyStorageMapEntry<std::string, SgSourceFile*> :: readFromFile (inputFileStream);
+}
+
+/*******************************************************************************
+ * Implementations for EasyStorageMapEntry <std::string, SgSourceFile*>
+ ******************************************************************************/
+// Is not inherited from StorageClassMemoryManagement!!!!
+void
+EasyStorageMapEntry <std::string, SgSourceFile*> ::
+storeDataInEasyStorageClass (std::string filename, SgSourceFile* sourceFile)
+{
+  // call suitable methods of parent and member
+  filename_.storeDataInEasyStorageClass(filename);
+  sourceFile_.storeDataInEasyStorageClass(sourceFile);
+}
+
+// TOO1: TODO (4/24/2013)
+std::pair<std::string, SgSourceFile*>
+EasyStorageMapEntry <std::string, SgSourceFile*> ::
+rebuildDataStoredInEasyStorageClass() const
+{
+  std::string filename =
+      filename_.rebuildDataStoredInEasyStorageClass();
+  SgSourceFile* sourceFile =
+      sourceFile_.rebuildDataStoredInEasyStorageClass();
+
+  std::pair<std::string, SgSourceFile*> return_pair(
+      filename,
+      sourceFile);
+
+  return return_pair;
+}
+
+void
+EasyStorageMapEntry <std::string, SgSourceFile*> ::
+arrangeMemoryPoolInOneBlock()
+{
+  // EasyStorage <std::string> occurs twice, but is only called once!!!!!!!!
+  EasyStorage <std::string> :: arrangeMemoryPoolInOneBlock();
+  EasyStorage <char*> :: arrangeMemoryPoolInOneBlock();
+}
+
+void
+EasyStorageMapEntry <std::string, SgSourceFile*> ::
+deleteMemoryPool()
+{
+  // EasyStorage <std::string> occurs twice, but is only called once!!!!!!!!
+  EasyStorage <std::string> :: deleteMemoryPool();
+  EasyStorage <char*> :: deleteMemoryPool();
+}
+
+void
+EasyStorageMapEntry <std::string, SgSourceFile*> ::
+writeToFile(std::ostream& outputFileStream)
+{
+  #if FILE_IO_MARKER
+    AST_FILE_IO_MARKER::writeMarker("|07|", outputFileStream);
+  #endif
+
+  // EasyStorage <std::string> occurs twice, but is only called once!!!!!!!!
+  EasyStorage <std::string> :: writeToFile(outputFileStream);
+  EasyStorage <char*> :: writeToFile(outputFileStream);
+}
+
+void
+EasyStorageMapEntry <std::string, SgSourceFile*> ::
+readFromFile (std::istream& inputFileStream)
+{
+  #if FILE_IO_MARKER
+    AST_FILE_IO_MARKER::readMarker("|07|", inputFileStream);
+  #endif
+
+  // EasyStorage <std::string> occurs twice, but is only called once!!!!!!!!
+  EasyStorage <std::string> :: readFromFile (inputFileStream);
+  EasyStorage <char*> :: readFromFile (inputFileStream);
+}

@@ -802,6 +802,67 @@ class EasyStorage <std::map<std::string, std::set<PreprocessingInfo*> > >
      static void readFromFile (std::istream& in);
 };
 
+template <>
+class EasyStorage <SgSourceFile*>
+  : public StorageClassMemoryManagement<char>
+{
+  private:
+    typedef StorageClassMemoryManagement<char> Base;
+
+  public:
+    void storeDataInEasyStorageClass(SgSourceFile* data);
+
+    SgSourceFile* rebuildDataStoredInEasyStorageClass() const;
+    static void arrangeMemoryPoolInOneBlock();
+    static void deleteMemoryPool();
+
+    static void writeToFile(std::ostream& out);
+    static void readFromFile (std::istream& in);
+};
+
+// EasyStorage for a map of SgSourceFile pointers
+template <>
+class EasyStorage <std::map<std::string, SgSourceFile*> >
+  : public StorageClassMemoryManagement<EasyStorageMapEntry<std::string, SgSourceFile*> >
+{
+  private:
+    typedef StorageClassMemoryManagement<
+        EasyStorageMapEntry<std::string, SgSourceFile*> > Base;
+
+  public:
+    void storeDataInEasyStorageClass(
+        const std::map<std::string, SgSourceFile*>& data);
+    std::map<std::string, SgSourceFile*>
+        rebuildDataStoredInEasyStorageClass() const;
+    static void arrangeMemoryPoolInOneBlock();
+    static void deleteMemoryPool();
+
+    static void writeToFile(std::ostream& out);
+    static void readFromFile (std::istream& in);
+};
+
+template <>
+class EasyStorageMapEntry <std::string, SgSourceFile*>
+{
+  private:
+    EasyStorage <std::string>   filename_;
+    EasyStorage <SgSourceFile*> sourceFile_;
+  public:
+    EasyStorageMapEntry () {}
+
+    void
+    storeDataInEasyStorageClass(std::string, SgSourceFile*);
+
+    std::pair<std::string, SgSourceFile*>
+        rebuildDataStoredInEasyStorageClass() const;
+
+    static void arrangeMemoryPoolInOneBlock();
+    static void deleteMemoryPool();
+
+    static void writeToFile(std::ostream& out);
+    static void readFromFile (std::istream& in);
+};
+
 // EasyStorageMapEntry concerning an SgName and a Type T
 // * it has overloaded methods for arrangeMemoryPoolInOneBlock and deleteMemoryPool
 template < >
