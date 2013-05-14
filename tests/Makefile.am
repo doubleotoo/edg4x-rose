@@ -36,7 +36,8 @@ bin_PROGRAMS = \
    testAstFileRead \
    parallelASTMerge \
    testGraphGeneration \
-   testTokenGeneration
+   testTokenGeneration \
+   KeepGoingTranslator
 
 # DQ (1/16/2012): This test code is not supported when compiling for simple front-end testing (smallest subset of ROSE that can be built).
 if !ROSE_USE_INTERNAL_FRONTEND_DEVELOPMENT
@@ -92,6 +93,9 @@ testGraphGeneration_SOURCES = testGraphGeneration.C
 # This tests the token generation capabilities which are an option in ROSE used to support the 
 # generation of patches to define transformations of large scale applications.
 testTokenGeneration_SOURCES = testTokenGeneration.C
+
+# Ignores internal ROSE failures, see `rose --help` for info on `-rose:keep_going`
+KeepGoingTranslator_SOURCES = KeepGoingTranslator.cpp
 
 # Use names set in ROSE/config/Makefile.for.ROSE.includes.and.libs
 INCLUDES = $(ROSE_INCLUDES)
