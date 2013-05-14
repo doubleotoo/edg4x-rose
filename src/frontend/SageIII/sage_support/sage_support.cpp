@@ -7,6 +7,10 @@
 /*-----------------------------------------------------------------------------
  *  Dependencies
  *---------------------------------------------------------------------------*/
+// TOO1 (05/14/2013): Signal handling for -rose:keep_going
+#include <setjmp.h>
+#include <signal.h>
+
 #include <algorithm>
 
 #include <boost/filesystem.hpp>
@@ -724,10 +728,7 @@ SgSourceFile::initializeGlobalScope()
         }
    }
 
-#include <setjmp.h>
-#include <signal.h>
-#include <stdio.h>
-#include <unistd.h>
+// TOO1 (05/14/2013): Signal handling for -rose:keep_going
 sigjmp_buf rose__sgproject_parse_mark;
 static void HandleFrontendSignal(int sig)
 {
@@ -1278,6 +1279,7 @@ determineFileType ( vector<string> argv, int & nextErrorCode, SgProject* project
         {
        // printf ("Calling file->callFrontEnd() \n");
 
+  // TOO1 (05/14/2013): Signal handling for -rose:keep_going
   if (file->get_project()->get_keep_going())
   {
       struct sigaction act;
@@ -1304,6 +1306,7 @@ determineFileType ( vector<string> argv, int & nextErrorCode, SgProject* project
       }
       catch (...)
       {
+          // TOO1 (05/14/2013): Handling for -rose:keep_going
           std::cout << "[WARN] Caught frontend exception" << std::endl;
           if (file->get_project()->get_keep_going())
           {
@@ -3167,7 +3170,6 @@ SgSourceFile::build_Fortran_AST( vector<string> argv, vector<string> inputComman
                printf ("Syntax errors detected in input fortran program ... \n");
 
             // We should define some convention for error codes returned by ROSE
-               //exit(1);
                throw std::exception();
              }
           ROSE_ASSERT(returnValueForSyntaxCheckUsingBackendCompiler == 0);
@@ -3687,7 +3689,6 @@ SgSourceFile::build_Java_AST( vector<string> argv, vector<string> inputCommandLi
                printf ("Syntax errors detected in input java program ... status = %d \n",returnValueForSyntaxCheckUsingBackendCompiler);
 
             // We should define some convention for error codes returned by ROSE
-               //exit(1);
                throw std::exception();
              }
           ROSE_ASSERT(returnValueForSyntaxCheckUsingBackendCompiler == 0);
@@ -4433,6 +4434,8 @@ SgFile::compileOutput ( vector<string>& argv, int fileNameIndex )
   // object file.
   // printf ("In SgFile::compileOutput(): get_unparse_output_filename() = %s \n",get_unparse_output_filename().c_str());
 
+  // TOO1 (05/14/2013): Handling for -rose:keep_going
+  //
   // Compile the original source code file if:
   //
   // 1. Unparsing was skipped
@@ -4456,6 +4459,7 @@ SgFile::compileOutput ( vector<string>& argv, int fileNameIndex )
           )
       );
 
+    // TOO1 (05/14/2013): Signal handling for -rose:keep_going
     if (use_original_input_file)
     {
           //ROSE_ASSERT(get_skip_unparse() == true);
@@ -4498,14 +4502,7 @@ SgFile::compileOutput ( vector<string>& argv, int fileNameIndex )
                       boost::filesystem::copy_option::overwrite_if_exists);
               }
           }
-
           set_unparse_output_filename(outputFilename);
-
-       // DQ (6/25/2006): I think it is OK to not have an output file name specified.
-       // display ("In SgFile::compileOutput(): get_unparse_output_filename().empty() == true");
-
-       // printf ("Exiting as a test \n");
-       // ROSE_ASSERT(false);
     }
 #endif
 
@@ -4572,9 +4569,11 @@ SgFile::compileOutput ( vector<string>& argv, int fileNameIndex )
           //CAVE3 double check that is correct and shouldn't be compilerCmdLine
            returnValueForCompiler = systemFromVector (compilerCmdLine);
 
+          // TOO1 (05/14/2013): Handling for -rose:keep_going
+          //
           // Compilation failed =>
           //
-          //   1. Unparsed file is invalid => (2) Try compiling the original input file
+          //   1. Unparsed file is invalid => Try compiling the original input file
           //   2. Original input file is invalid => abort
           if (returnValueForCompiler != 0)
           {
@@ -4783,6 +4782,7 @@ SgProject::compileOutput()
                 localErrorCode = file.compileOutput(0);
             } catch (std::exception &e)
             {
+                // TOO1 (05/14/2013): Handling for -rose:keep_going
                 if (this->get_keep_going())
                 {
                     std::cerr
