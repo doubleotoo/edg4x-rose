@@ -5200,7 +5200,9 @@ HEADER_APPLICATION_FILE_START
        // bool get_binary_only (void) const;
 
        // DQ (6/13/2013): Added to support to call the frontend after all SgFiles are built up.
-          void runFrontend(int & nextErrorCode);
+          // On success, sets p_frontendErrorCode
+          // On failure, no guarantee on setting p_frontendErrorCode
+          int RunFrontend();
 
 #if 0
 // DQ (9/5/2008): Moved to SgSourceFile
@@ -5399,8 +5401,11 @@ HEADER_APPLICATION_PROJECT_START
           void processCommandLine(const std::vector<std::string>& argv);
           void processCommandLine(int argc, char** argv) { processCommandLine(std::vector<std::string>(argv, argv + argc)); }
 
+        std::vector<SgFile*> create_files();
+
       //! parse input file(s)
           int parse();
+          int RunFrontend();
 
       //! processes command line and parses all files.
       //! Error code can be accessed using get_frontendErrorCode()
