@@ -664,7 +664,7 @@ SgSymbol* AstInterfaceImpl::CreateDeclarationStmts( const string& _decl)
 
   // DQ (6/14/2013): Since we seperated the construction of the SgFile IR nodes from the invocation of the frontend, we have to call the frontend explicitly.
      ROSE_ASSERT(addDecls != NULL);
-     addDecls->runFrontend(error);
+     error = addDecls->RunFrontend();
 
      unlink( uniqueFilename );
   // string systemString = string("rm '") + uniqueFilename + "'";

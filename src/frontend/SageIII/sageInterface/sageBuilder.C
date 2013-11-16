@@ -12324,7 +12324,7 @@ SageBuilder::buildFile(const std::string& inputFileName, const std::string& outp
      ROSE_ASSERT(result != NULL);
 
   // DQ (6/14/2013): Since we seperated the construction of the SgFile IR nodes from the invocation of the frontend, we have to call the frontend explicitly.
-     result->runFrontend(nextErrorCode);
+     nextErrorCode = result->RunFrontend();
 
 #if 0
      result->display("SageBuilder::buildFile()");

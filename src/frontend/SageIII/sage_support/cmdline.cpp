@@ -8,6 +8,7 @@
  *  Dependencies
  *---------------------------------------------------------------------------*/
 #include "cmdline.h"
+#include "keep_going.h"
 
 /*-----------------------------------------------------------------------------
  *  namespace SageSupport::Cmdline {
@@ -1184,6 +1185,7 @@ ProcessKeepGoing (SgProject* project, std::vector<std::string>& argv)
           std::cout << "[INFO] [Cmdline] [-rose:keep_going]" << std::endl;
 
       project->set_keep_going(true);
+      ROSE::KeepGoing::g_keep_going = true;
   }
 }
 
