@@ -8,6 +8,7 @@
  *  Dependencies
  *---------------------------------------------------------------------------*/
 #include "cmdline.h"
+#include "keep_going.h"
 
 /*-----------------------------------------------------------------------------
  *  namespace SageSupport::Cmdline {
@@ -506,6 +507,18 @@ SgProject::processCommandLine(const vector<string>& input_argv)
 #if 0
      printf ("Inside of SgProject::processCommandLine() \n");
 #endif
+
+  // Validate commandline:
+  //
+  // At the minimum, the ROSE executable and filename must be present,
+  // for example:
+  //
+  //    $ identityTranslator hello.cpp
+  //
+  if (input_argv.size() == 1)
+  {
+      SgFile::usage(1); // Print usage and exit with exit status == 1
+  }
 
   // local copies of argc and argv variables
   // The purpose of building local copies is to avoid
@@ -1184,6 +1197,7 @@ ProcessKeepGoing (SgProject* project, std::vector<std::string>& argv)
           std::cout << "[INFO] [Cmdline] [-rose:keep_going]" << std::endl;
 
       project->set_keep_going(true);
+      ROSE::KeepGoing::g_keep_going = true;
   }
 }
 

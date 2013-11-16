@@ -7,17 +7,15 @@
 /*-----------------------------------------------------------------------------
  *  Dependencies
  *---------------------------------------------------------------------------*/
+#include "keep_going.h"
 #include "sage_support.h"
 #include "dwarfSupport.h"
-
-// TOO1 (05/14/2013): Signal handling for -rose:keep_going
-#include <setjmp.h>
-#include <signal.h>
 
 #include <algorithm>
 
 #define BOOST_FILESYSTEM_VERSION 2
 #include <boost/filesystem.hpp>
+#include <boost/foreach.hpp>
 
 #include "sage_support.h"
 
@@ -749,14 +747,6 @@ SgSourceFile::initializeGlobalScope()
         }
    }
 
-// TOO1 (05/14/2013): Signal handling for -rose:keep_going
-sigjmp_buf rose__sgproject_parse_mark;
-static void HandleFrontendSignal(int sig)
-{
-  std::cout << "[WARN] Caught frontend signal='" << sig << "'" << std::endl;
-  siglongjmp(rose__sgproject_parse_mark, -1);
-}
-
 SgFile*
 #if 0
 // FMZ (07/07/2010): "nextErrorCode" should be call by reference argument
@@ -1407,88 +1397,51 @@ determineFileType ( vector<string> argv, int & nextErrorCode, SgProject* project
    }
 
 
-void 
-SgFile::runFrontend(int & nextErrorCode)
-   {
-  // DQ (6/13/2013):  This function supports the seperation of the construction of the SgFile IR nodes from the 
-  // invocation of the fronend on each SgFile IR node.
-
-#if 0
-     printf ("************************ \n");
-     printf ("In SgFile::runFrontend() \n");
-     printf ("************************ \n");
-#endif
-
-#if 0
-  // Output state of the SgFile.
-     display("In runFrontend()");
-#endif
-
-  // DQ (6/13/2013): Added to support error checking (seperation of construction of SgFile IR nodes from calling the fronend on each one).
-     ROSE_ASSERT(get_parent() != NULL);
+int
+SgFile::RunFrontend()
+{
+  int status_of_function = 0;
 
   // DQ (6/13/2013): This is wrong, the parent of the SgFile is the SgFileList IR node.
   // ROSE_ASSERT(isSgProject(get_parent()) != NULL);
+  ROSE_ASSERT(this->get_parent() != NULL);
 
-  // DQ (6/12/2013): This is the functionality that we need to separate out and run after all 
-  // of the SgSourceFile IR nodes are constructed.
+  if (KEEP_GOING_CAUGHT_FILE_FRONTEND_SIGNAL == false)
+  {
+      try
+      {
+          //-----------------------------------------------------------
+          // Pass File to Frontend
+          //-----------------------------------------------------------
+          status_of_function = this->callFrontEnd();
+          ROSE_ASSERT (status_of_function <= 3);
+      }
+      catch(...)
+      {
+          if (ROSE::KeepGoing::g_keep_going)
+          {
+              raise(SIGABRT);
+          }
+          else
+          {
+              throw;
+          }
+      }
+  }
+  else
+  {
+      std::cout
+          << "[WARN] "
+          << "Configured to keep going after catching a "
+          << "SgFile::RunFrontend() signal"
+          << std::endl;
 
-#if 1
-  // The frontend is called explicitly outside the constructor since that allows for a cleaner
-  // control flow. The callFrontEnd() relies on all the "set_" flags to be already called therefore
-  // it was placed here.
-  // if ( isSgUnknownFile(file) == NULL && file != NULL  )
-     if ( this != NULL && isSgUnknownFile(this) == NULL )
-        {
-       // printf ("Calling file->callFrontEnd() \n");
+      this->set_frontendErrorCode(1);
+      status_of_function = -1;
+  }
 
-       // TOO1 (05/14/2013): Signal handling for -rose:keep_going
-          if (this->get_project()->get_keep_going())
-             {
-               struct sigaction act;
-               act.sa_handler = HandleFrontendSignal;
-               sigemptyset(&act.sa_mask);
-               act.sa_flags = 0;
-               sigaction(SIGSEGV, &act, 0);
-               sigaction(SIGABRT, &act, 0);
-             }
-
-          if (sigsetjmp(rose__sgproject_parse_mark, 0) == -1)
-             {
-               std::cout
-                    << "[WARN] Ignoring frontend failure "
-                    << " as directed by -rose:keep_going"
-                    << std::endl;
-               this->set_frontendErrorCode(-1);
-             }
-            else
-             {
-               try
-                  {
-                    nextErrorCode = this->callFrontEnd();
-                  }
-               catch (...)
-                  {
-                 // TOO1 (05/14/2013): Handling for -rose:keep_going
-                    std::cout << "[WARN] Caught frontend exception" << std::endl;
-                    if (this->get_project()->get_keep_going())
-                       {
-                         this->set_frontendErrorCode(-1);
-                       }
-                      else
-                       {
-                         throw;
-                       }
-                  }
-             }
-
-       // printf ("DONE: Calling file->callFrontEnd() \n");
-          ROSE_ASSERT ( nextErrorCode <= 3);
-        }
-#else
-     printf ("In SgFile::runFrontend(): Skipping call to frontend for SgFile = %p \n",this);
-#endif
-   }
+  return status_of_function;
+}//SgFile::RunFrontend()
 
 
 // DQ (10/20/2010): Note that Java support can be enabled just because Java internal support was found on the
@@ -1520,9 +1473,6 @@ SgProject::parse(const vector<string>& argv)
 #if 0
      printf ("Inside of SgProject::parse(const vector<string>& argv) \n");
 #endif
-
-  // builds file list (or none if this is a link line)
-     processCommandLine(argv);
 
      int errorCode = 0;
 
@@ -1614,6 +1564,7 @@ SgProject::parse(const vector<string>& argv)
 // #endif // USE_ROSE_OPEN_FORTRAN_PARSER_SUPPORT
 #endif
                     errorCode = parse();
+                    this->set_frontendErrorCode(errorCode);
 
                  // FMZ deleteComm jserver_finish();
                   }
@@ -1679,6 +1630,47 @@ SgProject::parse(const vector<string>& argv)
      return errorCode;
    }
 
+// The goal in this version of the code is to seperate the construction of the SgFile objects 
+// from the invocation of the fronend on each of the SgFile objects.  In general this allows
+// the comilation to reference the other SgFile objects on an as needed basis as part of running
+// the frontend.  This is importnat from the optimization of Java.
+std::vector<SgFile*>
+SgProject::create_files()
+{
+  int                       error_code = 0;
+  std::vector<SgFile*>      files;
+
+  std::vector<std::string>  all_filenames =
+      this->get_sourceFileNameList();
+  BOOST_FOREACH(std::string filename, all_filenames)
+  {
+      // Create a single-filename commandline
+      std::vector<std::string> argv = // original commandline with all filenames
+          this->get_originalCommandLineArgumentList();
+      CommandlineProcessing::removeAllFileNamesExcept(
+          argv,
+          all_filenames, // Remove all of these filenames from argv
+          filename);     // Except for this filename
+
+      // Create and initialize new file
+      // TOO1 (11/16/2013): TODO: Handle error_code
+      SgFile* file = determineFileType(argv, error_code, this);
+      ROSE_ASSERT (file != NULL);
+      ROSE_ASSERT (file->get_startOfConstruct() != NULL);
+
+      // Add new file to list of files stored internally within this SgProject.
+      // Note: This sets the parent of the file to this SgProject.
+      set_file(*file);
+      ROSE_ASSERT (file->get_parent() != NULL);
+      ROSE_ASSERT (file->get_parent() != NULL);
+      ROSE_ASSERT (file->get_parent() == this);
+      ROSE_ASSERT (isSgProject(file->get_parent()) != NULL);
+
+      files.push_back(file);
+  }//files.each
+
+  return files;
+}//SgProject::create_files
 
 SgSourceFile::SgSourceFile ( vector<string> & argv , SgProject* project )
 // : SgFile (argv,errorCode,fileNameIndex,project)
@@ -1778,11 +1770,34 @@ SgBinaryComposite::SgBinaryComposite ( vector<string> & argv ,  SgProject* proje
 #endif
 }
 
+int
+SgProject::RunFrontend()
+{
+  TimingPerformance timer ("AST (SgProject::RunFrontend()):");
+
+  int status_of_function = 0;
+
+  //---------------------------------------------------------------------------
+  // Pass each File to the Frontend
+  //---------------------------------------------------------------------------
+  std::vector<SgFile*> all_files = get_fileList();
+  {
+      int status_of_file = 0;
+      BOOST_FOREACH(SgFile* file, all_files)
+      {
+          status_of_file = file->callFrontEnd();
+          status_of_function =
+              max(status_of_file, status_of_function);
+      }
+  }//all_files->callFrontEnd
+
+  return status_of_function;
+}//SgProject::RunFrontend
 
 int
 SgProject::parse()
    {
-     int errorCode = 0;
+     int status_of_function = 0;
 
   // DQ (7/6/2005): Introduce tracking of performance of ROSE.
      TimingPerformance timer ("AST (SgProject::parse()):");
@@ -1795,140 +1810,9 @@ SgProject::parse()
      FortranModuleInfo::set_inputDirs(this );
 #endif
 
-  // Simplify multi-file handling so that a single file is just the trivial
-  // case and not a special separate case.
-#if 0
-     printf ("Loop through the source files on the command line! p_sourceFileNameList = %zu \n",p_sourceFileNameList.size());
-#endif
 
-     Rose_STL_Container<string>::iterator nameIterator = p_sourceFileNameList.begin();
-     unsigned int i = 0;
+  status_of_function = this->RunFrontend();
 
-#if 0
-  // DQ (6/13/2013): This is older code from when we build each SgFile and processed in immediately.
-  // We don't want such a design, thus we now build all of the SgFile IR nodes first, and then iterate
-  // over them to call the frontend on each of them (this could likely be done in parallel as well).
-
-     while (nameIterator != p_sourceFileNameList.end())
-        {
-          int nextErrorCode = 0;
-
-       // DQ (4/20/2006): Exclude other files from list in argc and argv
-          vector<string> argv = get_originalCommandLineArgumentList();
-          string currentFileName = *nameIterator;
-
-          CommandlineProcessing::removeAllFileNamesExcept(argv,p_sourceFileNameList,currentFileName);
-
-       // DQ (11/13/2008): Removed overly complex logic here!
-
-          SgFile* newFile = determineFileType(argv, nextErrorCode, this);
-          ROSE_ASSERT (newFile != NULL);
-
-          ROSE_ASSERT (newFile->get_startOfConstruct() != NULL);
-          ROSE_ASSERT (newFile->get_parent() != NULL);
-
-       // This just adds the new file to the list of files stored internally
-          set_file ( *newFile );
-
-          errorCode = max(errorCode,nextErrorCode); // use STL max
-
-          nameIterator++;
-          i++;
-        }
-#else
-  // The goal in this version of the code is to seperate the construction of the SgFile objects 
-  // from the invocation of the fronend on each of the SgFile objects.  In general this allows
-  // the comilation to reference the other SgFile objects on an as needed basis as part of running
-  // the frontend.  This is importnat from the optimization of Java.
-     std::vector<SgFile*> vectorOfFiles;
-     while (nameIterator != p_sourceFileNameList.end())
-        {
-#if 0
-          printf ("Build a SgFile object for file #%d \n",i);
-#endif
-          int nextErrorCode = 0;
-
-       // DQ (4/20/2006): Exclude other files from list in argc and argv
-          vector<string> argv = get_originalCommandLineArgumentList();
-          string currentFileName = *nameIterator;
-#if 0
-          printf ("In SgProject::parse(): before removeAllFileNamesExcept() file = %s argv = %s \n",
-               currentFileName.c_str(),CommandlineProcessing::generateStringFromArgList(argv,false,false).c_str());
-#endif
-          CommandlineProcessing::removeAllFileNamesExcept(argv,p_sourceFileNameList,currentFileName);
-#if 0
-          printf ("In SgProject::parse(): after removeAllFileNamesExcept() from command line for file = %s argv = %s \n",
-               currentFileName.c_str(),CommandlineProcessing::generateStringFromArgList(argv,false,false).c_str());
-          printf ("currentFileName = %s \n",currentFileName.c_str());
-#endif
-       // DQ (11/13/2008): Removed overly complex logic here!
-#if 0
-          printf ("+++++++++++++++ Calling determineFileType() currentFileName = %s \n",currentFileName.c_str());
-#endif
-          SgFile* newFile = determineFileType(argv, nextErrorCode, this);
-          ROSE_ASSERT (newFile != NULL);
-#if 0
-          printf ("+++++++++++++++ DONE: Calling determineFileType() currentFileName = %s \n",currentFileName.c_str());
-          printf ("In SgProject::parse(): newFile = %p = %s \n",newFile,newFile->class_name().c_str());
-#endif
-          ROSE_ASSERT (newFile->get_startOfConstruct() != NULL);
-          ROSE_ASSERT (newFile->get_parent() != NULL);
-
-       // DQ (6/13/2013): Added to support error checking (seperation of construction of SgFile IR nodes from calling the fronend on each one).
-          ROSE_ASSERT(isSgProject(newFile->get_parent()) != NULL);
-          ROSE_ASSERT(newFile->get_parent() == this);
-
-       // This just adds the new file to the list of files stored internally (note: this sets the parent of the newFile).
-          set_file ( *newFile );
-
-       // DQ (6/13/2013): Added to support error checking (seperation of construction of SgFile IR nodes from calling the fronend on each one).
-          ROSE_ASSERT(newFile->get_parent() != NULL);
-
-       // This list of files will be iterated over to call the frontend in the next loop.
-          vectorOfFiles.push_back(newFile);
-
-       // newFile->display("Called from SgProject::parse()");
-
-          nameIterator++;
-          i++;
-        }
-
-#if 0
-     printf ("In Project::parse(): (calling the frontend on all previously setup SgFile objects) vectorOfFiles.size() = %zu \n",vectorOfFiles.size());
-#endif
-
-  // DQ (6/12/2013): Now iterate over the list of SgFile objects that was just setup.
-     for (size_t i = 0; i < vectorOfFiles.size(); i++)
-        {
-#if 0
-          printf ("Call the frontend on each of the prebuilt SgSourceFile IR nodes! i = %zu \n",i);
-#endif
-
-       // DQ (6/13/2013): Added to support error checking (seperation of construction of SgFile IR nodes from calling the fronend on each one).
-          ROSE_ASSERT(vectorOfFiles[i]->get_parent() != NULL);
-
-          int nextErrorCode = 0;
-          vectorOfFiles[i]->runFrontend(nextErrorCode);
-
-          errorCode = max(errorCode,nextErrorCode); // use STL max
-        }
-#endif
-
-  // DQ (6/13/2013): Test the new function to lookup the SgFile from the name with full path.
-  // This is a simple consistancy test for that new function.
-     for (size_t i = 0; i < vectorOfFiles.size(); i++)
-        {
-          string filename = vectorOfFiles[i]->get_sourceFileNameWithPath();
-          SgFile* file = this->operator[](filename);
-          ROSE_ASSERT(file != NULL);
-
-          if ( SgProject::get_verbose() > 0 )
-             {
-               printf ("Testing: map of filenames to SgFile IR nodes: filename = %s is mapped to SgFile = %p \n",filename.c_str(),vectorOfFiles[i]);
-             }
-
-          ROSE_ASSERT(file == vectorOfFiles[i]);
-        }
 
   // printf ("Inside of SgProject::parse() before AstPostProcessing() \n");
 
@@ -2016,18 +1900,18 @@ SgProject::parse()
      if ( get_verbose() > 0 )
         {
        // Report the error code if it is non-zero (but only in verbose mode)
-          if (errorCode > 0)
+          if (status_of_function > 0)
              {
-               printf ("Frontend Warnings only: errorCode = %d \n",errorCode);
-               if (errorCode > 3)
+               printf ("Frontend Warnings only: status_of_function = %d \n", status_of_function);
+               if (status_of_function > 3)
                   {
-                    printf ("Frontend Errors found: errorCode = %d \n",errorCode);
+                    printf ("Frontend Errors found: status_of_function = %d \n", status_of_function);
                   }
              }
         }
 
   // warnings from EDG processing are OK but not errors
-     ROSE_ASSERT (errorCode <= 3);
+     ROSE_ASSERT (status_of_function <= 3);
 
   // if (get_useBackendOnly() == false)
      if ( SgProject::get_verbose() >= 1 )
@@ -2039,7 +1923,7 @@ SgProject::parse()
           display ("In SgProject::parse()");
         }
 
-     return errorCode;
+     return status_of_function;
    }
 
 //negara1 (07/29/2011)

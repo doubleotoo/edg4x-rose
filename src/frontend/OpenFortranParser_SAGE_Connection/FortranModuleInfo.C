@@ -277,7 +277,7 @@ FortranModuleInfo::createSgSourceFile(string modName)
 #endif
 
    // DQ (6/13/2013): Since we seperated the construction of the SgFile IR nodes from the invocation of the frontend, we have to call the frontend explicitly.
-     newFile->runFrontend(errorCode);
+     errorCode = newFile->RunFrontend();
 
   // DQ (6/13/2013): At least report that the error code is not checked, this is just something that I noticed but don't want to modify just now.
   // I guess that the point is that it should compile since the module compiled previously, but it should still be enforced to be zero.
