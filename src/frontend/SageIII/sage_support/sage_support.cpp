@@ -4726,7 +4726,8 @@ SgFile::compileOutput ( vector<string>& argv, int fileNameIndex )
                          //throw std::runtime_error("Original input file is invalid");
                          std::cout  << "[FATAL] "
                                     << "Original input file is invalid: "
-                                    << "'" << this->getFileName() << "'";
+                                    << "'" << this->getFileName() << "'"
+                                    << std::endl;
                          exit(1);
                        }
                       else
